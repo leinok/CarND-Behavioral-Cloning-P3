@@ -3,6 +3,7 @@ import base64
 from datetime import datetime
 import os
 import shutil
+import cv2
 
 import numpy as np
 import socketio
@@ -15,11 +16,12 @@ from io import BytesIO
 from keras.models import load_model
 import h5py
 from keras import __version__ as keras_version
-
+from model import preprocess 
 sio = socketio.Server()
 app = Flask(__name__)
 model = None
 prev_image_array = None
+
 
 
 class SimplePIController:
@@ -60,15 +62,18 @@ def telemetry(sid, data):
         # The current image from the center camera of the car
         imgString = data["image"]
         image = Image.open(BytesIO(base64.b64decode(imgString)))
-        image_array = np.asarray(image)
-        steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
 
+        image_array = np.asarray(image)
+	image_array = preprocess(image_array)
+        steering_angle = float(model.predict(image_array[None, :, :, :], batch_size=1))
+	print "------------the size is: {}".format(image_array.shape)
         throttle = controller.update(float(speed))
 
         print(steering_angle, throttle)
         send_control(steering_angle, throttle)
 
         # save frame
+	print "args image_folder is {}".format(args.image_folder)
         if args.image_folder != '':
             timestamp = datetime.utcnow().strftime('%Y_%m_%d_%H_%M_%S_%f')[:-3]
             image_filename = os.path.join(args.image_folder, timestamp)
@@ -119,7 +124,9 @@ if __name__ == '__main__':
         print('You are using Keras version ', keras_version,
               ', but the model was built using ', model_version)
 
+    print "args.model is {}".format(args.model)
     model = load_model(args.model)
+    print ("---------------model is {}-----------").format(args.model)
 
     if args.image_folder != '':
         print("Creating image folder at {}".format(args.image_folder))
